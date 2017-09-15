@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Plugin.MediaManager.Abstractions.Enums;
 using Plugin.MediaManager.Abstractions.EventArguments;
@@ -93,9 +94,9 @@ namespace Plugin.MediaManager.Abstractions.Implementations
 
                     await PrepareCurrentAndThen(async () =>
                     {
-                        await CurrentPlaybackManager.Play();        
-                        await CurrentPlaybackManager.Pause();
-                        await Seek(TimeSpan.Zero);
+                        await CurrentPlaybackManager.Play(MediaQueue.Current);        
+                        //await CurrentPlaybackManager.Pause();
+                        //await Seek(TimeSpan.Zero);
                     });
 
                     OnMediaFileChanged(this, new MediaFileChangedEventArgs(CurrentMediaFile));
@@ -139,6 +140,10 @@ namespace Plugin.MediaManager.Abstractions.Implementations
 
         public async Task Play(IMediaFile mediaFile = null)
         {
+            if (Status == MediaPlayerStatus.Playing)
+            {
+                return;
+            }
             if (mediaFile == null)
             {
                 if (Status == MediaPlayerStatus.Paused)

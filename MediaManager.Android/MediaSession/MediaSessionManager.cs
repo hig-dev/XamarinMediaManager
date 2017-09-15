@@ -14,7 +14,6 @@ namespace Plugin.MediaManager.MediaSession
     public class MediaSessionManager
     {
         private Context applicationContext;
-        private MediaControllerCompat mediaControllerCompat;
         private MediaSessionCompat mediaSessionCompat;
         private MediaServiceBinder _binder;
         private string _packageName;
@@ -34,15 +33,16 @@ namespace Plugin.MediaManager.MediaSession
         public event EventHandler<string> OnNotificationActionFired;
         internal event EventHandler<int> OnStatusChanged;
 
-        internal int MediaPlayerState => mediaControllerCompat?.PlaybackState?.State ?? PlaybackStateCompat.StateNone;
+        internal int MediaPlayerState => MediaController?.PlaybackState?.State ?? PlaybackStateCompat.StateNone;
 
         public MediaSessionCompat CurrentSession => mediaSessionCompat;
-
+        internal MediaControllerCompat MediaController { get; set; }
         internal Context ApplicationContext => applicationContext;
-
         internal ComponentName RemoteComponentName { get; set; }
 
         private Type _serviceType;
+
+        internal MediaServiceBase MediaService { get; set; }
 
         public MediaSessionManager(Context appContext, Type serviceType)
         {
@@ -61,12 +61,24 @@ namespace Plugin.MediaManager.MediaSession
 
                     RemoteComponentName = new ComponentName(packageName, new RemoteControlBroadcastReceiver().ComponentName);
                     mediaSessionCompat = new MediaSessionCompat(applicationContext, "XamarinStreamingAudio", RemoteComponentName, pIntent);
-                    mediaControllerCompat = new MediaControllerCompat(applicationContext, mediaSessionCompat.SessionToken);
-                    _notificationManager = _overrideNotificationManager ?? new MediaNotificationManagerImplementation(applicationContext, CurrentSession.SessionToken, _serviceType);
+                    MediaController = new MediaControllerCompat(applicationContext, mediaSessionCompat.SessionToken);
+                    _notificationManager = _overrideNotificationManager ?? new MediaNotificationManagerImplementation(this, applicationContext);
                 }
                 mediaSessionCompat.Active = true;
-                MediaServiceBase mediaServiceBase = binder.GetMediaPlayerService<MediaServiceBase>();
-                MediaSessionCompat.Callback remoteCallback = mediaServiceBase.AlternateRemoteCallback;
+                MediaService = binder.GetMediaPlayerService<MediaServiceBase>();
+                CrossMediaManager.Current.VolumeManager.SetVolumeDelegate = (max, vol, mute) =>
+                {
+                    if (mute)
+                    {
+                        MediaService.SetVolume(0,0);
+                    }
+                    else
+                    {
+                        var resVol = vol / max;
+                        MediaService.SetVolume(resVol, resVol);
+                    }
+                };
+                MediaSessionCompat.Callback remoteCallback = MediaService.AlternateRemoteCallback;
                 if (remoteCallback == null)
                     remoteCallback = new MediaSessionCallback(this);
                 try

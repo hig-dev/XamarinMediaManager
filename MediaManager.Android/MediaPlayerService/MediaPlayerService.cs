@@ -174,7 +174,7 @@ namespace Plugin.MediaManager
                     {
                         await _mediaPlayer?.SetDataSourceAsync(ApplicationContext, Android.Net.Uri.Parse(uri), RequestHeaders);
                     }
-                    catch (Exception)
+                    catch (Exception ex2)
                     {
                         return false;
                     }
