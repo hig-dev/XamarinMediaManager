@@ -15,8 +15,16 @@ using NotificationCompat = Android.Support.V7.App.NotificationCompat;
 
 namespace Plugin.MediaManager
 {
-    internal class MediaNotificationManagerImplementation : IMediaNotificationManager
+    public class MediaNotificationManagerImplementation : IMediaNotificationManager
     {
+        //The user can set these on the application start to use custom icons
+        public static int PreviousIconDrawableId = 0;
+        public static int NextIconDrawableId = 0;
+        public static int PlayIconDrawableId = 0;
+        public static int PauseIconDrawableId = 0;
+        public static int SmallIconDrawableId = 0;
+
+
         // private MediaSessionManagerImplementation _sessionHandler;
         private Intent _intent;
         private PendingIntent _pendingCancelIntent;
@@ -28,6 +36,17 @@ namespace Plugin.MediaManager
 
         public MediaNotificationManagerImplementation(Context appliactionContext, MediaSessionCompat.Token sessionToken, Type serviceType)
         {
+            if (SmallIconDrawableId == 0)
+            {
+                var icon = (appliactionContext.Resources?.GetIdentifier("xam_mediamanager_notify_ic", "drawable", appliactionContext?.PackageName)).GetValueOrDefault(0);
+                SmallIconDrawableId = icon != 0 ? icon : appliactionContext.ApplicationInfo.Icon;
+            }
+            if (NextIconDrawableId == 0) NextIconDrawableId = Android.Resource.Drawable.IcMediaNext;
+            if (PlayIconDrawableId == 0) PlayIconDrawableId = Android.Resource.Drawable.IcMediaPlay;
+            if (PauseIconDrawableId == 0) PauseIconDrawableId = Android.Resource.Drawable.IcMediaPause;
+            if (PreviousIconDrawableId == 0) PreviousIconDrawableId = Android.Resource.Drawable.IcMediaPrevious;
+
+
             _sessionToken = sessionToken;
             _appliactionContext = appliactionContext;
             _intent = new Intent(_appliactionContext, serviceType);
@@ -52,8 +71,6 @@ namespace Plugin.MediaManager
         /// </summary>
         public void StartNotification(IMediaFile mediaFile, bool mediaIsPlaying, bool canBeRemoved)
         {
-            var icon = (_appliactionContext.Resources?.GetIdentifier("xam_mediamanager_notify_ic", "drawable", _appliactionContext?.PackageName)).GetValueOrDefault(0);
-
             _notificationStyle.SetMediaSession(_sessionToken);
             _notificationStyle.SetCancelButtonIntent(_pendingCancelIntent);
 
@@ -61,7 +78,7 @@ namespace Plugin.MediaManager
             {
                 MStyle = _notificationStyle
             };
-            _builder.SetSmallIcon(icon != 0 ? icon : _appliactionContext.ApplicationInfo.Icon);
+            _builder.SetSmallIcon(SmallIconDrawableId);
             _builder.SetContentIntent(_pendingIntent);
             _builder.SetOngoing(mediaIsPlaying);
             _builder.SetVisibility(1);
@@ -132,11 +149,11 @@ namespace Plugin.MediaManager
         private void AddActionButtons(bool mediaIsPlaying)
         {
             _builder.MActions.Clear();
-            _builder.AddAction(GenerateActionCompat(Resource.Drawable.IcMediaPrevious, "Previous", MediaServiceBase.ActionPrevious));
+            _builder.AddAction(GenerateActionCompat(PreviousIconDrawableId, "Previous", MediaServiceBase.ActionPrevious));
             _builder.AddAction(mediaIsPlaying
-                ? GenerateActionCompat(Resource.Drawable.IcMediaPause, "Pause", MediaServiceBase.ActionPause)
-                : GenerateActionCompat(Resource.Drawable.IcMediaPlay, "Play", MediaServiceBase.ActionPlay));
-            _builder.AddAction(GenerateActionCompat(Resource.Drawable.IcMediaNext, "Next", MediaServiceBase.ActionNext));
+                ? GenerateActionCompat(PauseIconDrawableId, "Pause", MediaServiceBase.ActionPause)
+                : GenerateActionCompat(PlayIconDrawableId, "Play", MediaServiceBase.ActionPlay));
+            _builder.AddAction(GenerateActionCompat(NextIconDrawableId, "Next", MediaServiceBase.ActionNext));
         }
     }
 }
