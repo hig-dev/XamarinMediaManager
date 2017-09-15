@@ -66,6 +66,18 @@ namespace Plugin.MediaManager.MediaSession
                 }
                 mediaSessionCompat.Active = true;
                 MediaServiceBase mediaServiceBase = binder.GetMediaPlayerService<MediaServiceBase>();
+                CrossMediaManager.Current.VolumeManager.SetVolumeDelegate = (max, vol, mute) =>
+                {
+                    if (mute)
+                    {
+                        mediaServiceBase.SetVolume(0, 0);
+                    }
+                    else
+                    {
+                        var resVol = vol / max;
+                        mediaServiceBase.SetVolume(resVol, resVol);
+                    }
+                };
                 MediaSessionCompat.Callback remoteCallback = mediaServiceBase.AlternateRemoteCallback;
                 if (remoteCallback == null)
                     remoteCallback = new MediaSessionCallback(this);

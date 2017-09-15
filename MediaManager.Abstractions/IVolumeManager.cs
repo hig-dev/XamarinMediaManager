@@ -1,4 +1,5 @@
-﻿using Plugin.MediaManager.Abstractions.EventArguments;
+using System;
+using Plugin.MediaManager.Abstractions.EventArguments;
 
 namespace Plugin.MediaManager.Abstractions
 {
@@ -28,5 +29,11 @@ namespace Plugin.MediaManager.Abstractions
         /// True if the sound is Muted
         /// </summary>
         bool Mute { get; set; }
+
+        /// <summary>
+        /// Sets the volume on the audio player / media session
+        /// Parameters: maxVolume, volume, mute
+        /// </summary>
+        Action<float, float, bool> SetVolumeDelegate { get; set; }
     }
 }

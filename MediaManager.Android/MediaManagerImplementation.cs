@@ -48,7 +48,7 @@ namespace Plugin.MediaManager
                 _sessionManager.OnNotificationActionFired += HandleNotificationActions;
             }
         }
-        public override IVolumeManager VolumeManager { get; set; } = new VolumeManagerImplementation();
+        public override IVolumeManager VolumeManager { get; set; } = new VolumeManagerImplementation(100,100);
 
         private async void HandleNotificationActions(object sender, string action)
         {

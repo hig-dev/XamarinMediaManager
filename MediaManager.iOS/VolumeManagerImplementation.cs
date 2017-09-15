@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Plugin.MediaManager.Abstractions;
 
 namespace Plugin.MediaManager
@@ -12,5 +12,6 @@ namespace Plugin.MediaManager
         public event VolumeChangedEventHandler VolumeChanged;
 
         public bool Mute { get; set; }
+        public Action<float, float, bool> SetVolumeDelegate { get; set; }
     }
 }
