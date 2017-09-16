@@ -1,16 +1,21 @@
 using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Android;
 using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.Graphics;
+using Android.Media;
 using Android.Support.V4.App;
 using Android.Support.V4.Content;
+using Android.Support.V4.Media;
 using Android.Support.V4.Media.Session;
 using Plugin.MediaManager.Abstractions;
 using Plugin.MediaManager.Abstractions.Enums;
 using Plugin.MediaManager.Abstractions.Implementations;
+using Plugin.MediaManager.MediaSession;
 using NotificationCompat = Android.Support.V7.App.NotificationCompat;
 
 namespace Plugin.MediaManager
@@ -23,18 +28,23 @@ namespace Plugin.MediaManager
         public static int PlayIconDrawableId = 0;
         public static int PauseIconDrawableId = 0;
         public static int SmallIconDrawableId = 0;
+        //The user can set this to control if an album art is displayed on the lock screen in fullscreen
+        public static bool ShowFullscreenAlbumArtInLockscreen = true;
+
 
 
         // private MediaSessionManagerImplementation _sessionHandler;
         private Intent _intent;
         private PendingIntent _pendingCancelIntent;
         private PendingIntent _pendingIntent;
-        private NotificationCompat.MediaStyle _notificationStyle = new NotificationCompat.MediaStyle();
         private MediaSessionCompat.Token _sessionToken;
+        private MediaSessionManager _sessionManager;
         private Context _appliactionContext;
         private NotificationCompat.Builder _builder;
+        private bool _started = false;
+        private string _currentMediaFileUrl;
 
-        public MediaNotificationManagerImplementation(Context appliactionContext, MediaSessionCompat.Token sessionToken, Type serviceType)
+        public MediaNotificationManagerImplementation(Context appliactionContext, MediaSessionManager sessionManager, Type serviceType)
         {
             if (SmallIconDrawableId == 0)
             {
@@ -47,13 +57,14 @@ namespace Plugin.MediaManager
             if (PreviousIconDrawableId == 0) PreviousIconDrawableId = Android.Resource.Drawable.IcMediaPrevious;
 
 
-            _sessionToken = sessionToken;
+            _sessionManager = sessionManager;
+            _sessionToken = _sessionManager.CurrentSession.SessionToken;
             _appliactionContext = appliactionContext;
             _intent = new Intent(_appliactionContext, serviceType);
-            var mainActivity =
-                _appliactionContext.PackageManager.GetLaunchIntentForPackage(_appliactionContext.PackageName);
-            _pendingIntent = PendingIntent.GetActivity(_appliactionContext, 0, mainActivity,
-                PendingIntentFlags.UpdateCurrent);
+            var mainActivity = _appliactionContext.PackageManager.GetLaunchIntentForPackage(_appliactionContext.PackageName);
+            _pendingIntent = PendingIntent.GetActivity(_appliactionContext, 0, mainActivity, PendingIntentFlags.UpdateCurrent);
+
+            StopNotifications();
         }
 
         /// <summary>
@@ -71,67 +82,157 @@ namespace Plugin.MediaManager
         /// </summary>
         public void StartNotification(IMediaFile mediaFile, bool mediaIsPlaying, bool canBeRemoved)
         {
-            _notificationStyle.SetMediaSession(_sessionToken);
-            _notificationStyle.SetCancelButtonIntent(_pendingCancelIntent);
-
-            _builder = new NotificationCompat.Builder(_appliactionContext)
+            if (mediaFile == null)
             {
-                MStyle = _notificationStyle
-            };
-            _builder.SetSmallIcon(SmallIconDrawableId);
-            _builder.SetContentIntent(_pendingIntent);
-            _builder.SetOngoing(mediaIsPlaying);
-            _builder.SetVisibility(1);
+                StopNotifications();
+                return;
+            }
+            if (!_started || !string.Equals(_currentMediaFileUrl, mediaFile.Url))
+            {
+                Notification notification = CreateNotification(mediaFile,mediaIsPlaying);
+                NotificationManagerCompat.From(_appliactionContext).Notify(MediaServiceBase.NotificationId, notification);
+                UpdateMetadata(mediaFile);
+                _started = true;
+                _currentMediaFileUrl = mediaFile.Url;
+            }
 
-            SetMetadata(mediaFile);
-            AddActionButtons(mediaIsPlaying);
-            if (_builder.MActions.Count >= 3)
-                ((NotificationCompat.MediaStyle)(_builder.MStyle)).SetShowActionsInCompactView(0, 1, 2);
+        }
 
-            NotificationManagerCompat.From(_appliactionContext)
-                .Notify(MediaServiceBase.NotificationId, _builder.Build());
+        private Notification CreateNotification(IMediaFile mediaFile, bool mediaIsPlaying)
+        {
+
+            _builder = new NotificationCompat.Builder(_appliactionContext);
+
+            _builder.AddAction(GenerateActionCompat(PreviousIconDrawableId, "Previous", MediaServiceBase.ActionPrevious));
+            _builder.AddAction(mediaIsPlaying
+                ? GenerateActionCompat(PauseIconDrawableId, "Pause", MediaServiceBase.ActionPause)
+                : GenerateActionCompat(PlayIconDrawableId, "Play", MediaServiceBase.ActionPlay));
+            _builder.AddAction(GenerateActionCompat(NextIconDrawableId, "Next", MediaServiceBase.ActionNext));
+
+            _builder
+                .SetStyle(new NotificationCompat.MediaStyle()
+                    .SetShowActionsInCompactView(new int[] { 0, 1, 2 })  // show buttons in compact view
+                    .SetMediaSession(_sessionToken)
+                    .SetCancelButtonIntent(_pendingCancelIntent))
+                .SetSmallIcon(SmallIconDrawableId)
+                .SetVisibility(Android.Support.V4.App.NotificationCompat.VisibilityPublic)
+                .SetContentIntent(_pendingIntent)
+                .SetContentTitle(mediaFile?.Metadata?.Title ?? string.Empty)
+                .SetContentText(mediaFile?.Metadata?.Artist ?? string.Empty)
+                .SetContentInfo(mediaFile?.Metadata?.Album ?? string.Empty)
+                .SetLargeIcon(mediaFile?.Metadata?.Art as Bitmap)
+                .SetOngoing(mediaIsPlaying);
+
+            return _builder.Build();
         }
 
 
         public void StopNotifications()
         {
+            _started = false;
+            _currentMediaFileUrl = null;
             NotificationManagerCompat nm = NotificationManagerCompat.From(_appliactionContext);
             nm.CancelAll();
         }
 
-        public void UpdateNotifications(IMediaFile mediaFile, MediaPlayerStatus status)
+        private bool _updatingNotifications = false;
+        private IMediaFile _lastUpdatingNotificationMediaFile = null;
+        private MediaPlayerStatus _lastUpdatingNotificationMediaStatus;
+
+        public async void UpdateNotifications(IMediaFile mediaFile, MediaPlayerStatus status)
         {
-            try
+            // We have a problem if this is called too often
+            // Workaround:
+            _lastUpdatingNotificationMediaFile = mediaFile;
+            _lastUpdatingNotificationMediaStatus = status;
+            if (!_updatingNotifications)
             {
-                var isPlaying = status == MediaPlayerStatus.Playing || status == MediaPlayerStatus.Buffering;
-                var nm = NotificationManagerCompat.From(_appliactionContext);
-                if (nm != null && _builder != null)
-                {
-                    SetMetadata(mediaFile);
-                    AddActionButtons(isPlaying);
-                    _builder.SetOngoing(isPlaying);
-                    nm.Notify(MediaServiceBase.NotificationId, _builder.Build());
-                }
-                else
-                {
-                    StartNotification(mediaFile, isPlaying, false);
-                }
+                _updatingNotifications = true;
+                await Task.Run(async () => await Task.Delay(250));
+                UpdateNotificationsDirect(_lastUpdatingNotificationMediaFile, _lastUpdatingNotificationMediaStatus);
+                _updatingNotifications = false;
             }
-            catch (Exception ex)
+            else
             {
-                Console.WriteLine(ex.Message);
+                Debug.WriteLine($"Plugin.MediaManager: Prevented UpdateNotifications (Status = {status}), File={mediaFile?.Url}");
+            }
+
+        }
+
+        private void UpdateNotificationsDirect(IMediaFile mediaFile, MediaPlayerStatus status)
+        {
+            Debug.WriteLine($"Plugin.MediaManager: UpdateNotifications (Status = {status}), File={mediaFile?.Url}");
+
+            if (mediaFile == null)
+            {
                 StopNotifications();
             }
+            else
+            {
+                try
+                {
+                    switch (status)
+                    {
+                        case MediaPlayerStatus.Stopped:
+                        case MediaPlayerStatus.Failed:
+                            StopNotifications();
+                            break;
+                        case MediaPlayerStatus.Buffering:
+                        case MediaPlayerStatus.Playing:
+                            Notification notification = CreateNotification(mediaFile, true);
+                            NotificationManagerCompat.From(_appliactionContext).Notify(MediaServiceBase.NotificationId, notification);
+                            _started = true;
+                            _currentMediaFileUrl = mediaFile.Url;
+                            break;
+                        case MediaPlayerStatus.Paused:
+                            Notification notification2 = CreateNotification(mediaFile, false);
+                            NotificationManagerCompat.From(_appliactionContext).Notify(MediaServiceBase.NotificationId, notification2);
+                            _started = true;
+                            _currentMediaFileUrl = mediaFile.Url;
+                            break;
+                        case MediaPlayerStatus.Loading:
+                            break;
 
+                    }
+
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
+                    StopNotifications();
+                }
+            }
+            if (mediaFile != _lastUpdatingNotificationMediaFile || status != _lastUpdatingNotificationMediaStatus)
+            {
+                Debug.WriteLine($"Plugin.MediaManager: Notification not up to date: (Status = {_lastUpdatingNotificationMediaStatus}), File={_lastUpdatingNotificationMediaFile?.Url}");
+                UpdateNotifications(_lastUpdatingNotificationMediaFile, _lastUpdatingNotificationMediaStatus);
+            }
         }
 
-        private void SetMetadata(IMediaFile mediaFile)
+        /// <summary>
+        /// Updates the metadata on the lock screen
+        /// </summary>
+        /// <param name="currentTrack"></param>
+        private void UpdateMetadata(IMediaFile currentTrack)
         {
-            _builder.SetContentTitle(mediaFile?.Metadata?.Title ?? string.Empty);
-            _builder.SetContentText(mediaFile?.Metadata?.Artist ?? string.Empty);
-            _builder.SetContentInfo(mediaFile?.Metadata?.Album ?? string.Empty);
-            _builder.SetLargeIcon(mediaFile?.Metadata?.Art as Bitmap);
+
+            MediaMetadataCompat.Builder builder = new MediaMetadataCompat.Builder();
+
+            if (currentTrack?.Metadata != null && _sessionManager?.CurrentSession != null)
+            {
+                builder
+                    .PutString(MediaMetadata.MetadataKeyAlbum, currentTrack.Metadata.Artist)
+                    .PutString(MediaMetadata.MetadataKeyArtist, currentTrack.Metadata.Artist)
+                    .PutString(MediaMetadata.MetadataKeyTitle, currentTrack.Metadata.Title);
+                if (ShowFullscreenAlbumArtInLockscreen)
+                {
+                    builder.PutBitmap(MediaMetadata.MetadataKeyAlbumArt, currentTrack.Metadata.AlbumArt as Bitmap);
+                }
+                _sessionManager.CurrentSession.SetMetadata(builder.Build());
+            }
+           
         }
+
 
         private Android.Support.V4.App.NotificationCompat.Action GenerateActionCompat(int icon, string title, string intentAction)
         {
@@ -146,14 +247,6 @@ namespace Plugin.MediaManager
             return new Android.Support.V4.App.NotificationCompat.Action.Builder(icon, title, pendingIntent).Build();
         }
 
-        private void AddActionButtons(bool mediaIsPlaying)
-        {
-            _builder.MActions.Clear();
-            _builder.AddAction(GenerateActionCompat(PreviousIconDrawableId, "Previous", MediaServiceBase.ActionPrevious));
-            _builder.AddAction(mediaIsPlaying
-                ? GenerateActionCompat(PauseIconDrawableId, "Pause", MediaServiceBase.ActionPause)
-                : GenerateActionCompat(PlayIconDrawableId, "Play", MediaServiceBase.ActionPlay));
-            _builder.AddAction(GenerateActionCompat(NextIconDrawableId, "Next", MediaServiceBase.ActionNext));
-        }
+
     }
 }

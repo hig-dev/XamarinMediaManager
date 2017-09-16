@@ -62,7 +62,7 @@ namespace Plugin.MediaManager.MediaSession
                     RemoteComponentName = new ComponentName(packageName, new RemoteControlBroadcastReceiver().ComponentName);
                     mediaSessionCompat = new MediaSessionCompat(applicationContext, "XamarinStreamingAudio", RemoteComponentName, pIntent);
                     mediaControllerCompat = new MediaControllerCompat(applicationContext, mediaSessionCompat.SessionToken);
-                    _notificationManager = _overrideNotificationManager ?? new MediaNotificationManagerImplementation(applicationContext, CurrentSession.SessionToken, _serviceType);
+                    _notificationManager = _overrideNotificationManager ?? new MediaNotificationManagerImplementation(applicationContext, this, _serviceType);
                 }
                 mediaSessionCompat.Active = true;
                 MediaServiceBase mediaServiceBase = binder.GetMediaPlayerService<MediaServiceBase>();
@@ -78,6 +78,7 @@ namespace Plugin.MediaManager.MediaSession
                         mediaServiceBase.SetVolume(resVol, resVol);
                     }
                 };
+                CrossMediaManager.Current.VolumeManager.SetVolumeDelegate.Invoke(CrossMediaManager.Current.VolumeManager.MaxVolume, CrossMediaManager.Current.VolumeManager.CurrentVolume, CrossMediaManager.Current.VolumeManager.Mute);
                 MediaSessionCompat.Callback remoteCallback = mediaServiceBase.AlternateRemoteCallback;
                 if (remoteCallback == null)
                     remoteCallback = new MediaSessionCallback(this);
@@ -167,35 +168,6 @@ namespace Plugin.MediaManager.MediaSession
 
         }
 
-        /// <summary>
-        /// Updates the metadata on the lock screen
-        /// </summary>
-        /// <param name="currentTrack"></param>
-        internal void UpdateMetadata(IMediaFile currentTrack)
-        {
-
-            MediaMetadataCompat.Builder builder = new MediaMetadataCompat.Builder();
-
-            if (currentTrack != null)
-            {
-                builder
-                    .PutString(MediaMetadata.MetadataKeyAlbum, currentTrack.Metadata.Artist)
-                    .PutString(MediaMetadata.MetadataKeyArtist, currentTrack.Metadata.Artist)
-                    .PutString(MediaMetadata.MetadataKeyTitle, currentTrack.Metadata.Title);
-            }
-            else
-            {
-                builder
-                    .PutString(MediaMetadata.MetadataKeyAlbum,
-                        CurrentSession?.Controller?.Metadata?.GetString(MediaMetadata.MetadataKeyAlbum))
-                    .PutString(MediaMetadata.MetadataKeyArtist,
-                        CurrentSession?.Controller?.Metadata?.GetString(MediaMetadata.MetadataKeyArtist))
-                    .PutString(MediaMetadata.MetadataKeyTitle,
-                        CurrentSession?.Controller?.Metadata?.GetString(MediaMetadata.MetadataKeyTitle));
-            }
-
-            builder.PutBitmap(MediaMetadata.MetadataKeyAlbumArt, currentTrack?.Metadata.AlbumArt as Bitmap);
-            CurrentSession?.SetMetadata(builder.Build());
-        }
+        
     }
 }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -61,8 +61,11 @@ namespace Plugin.MediaManager
             }
             private set
             {
-                status = value;
-                StatusChanged?.Invoke(this, new StatusChangedEventArgs(status));
+                if (status != value)
+                {
+                    status = value;
+                    StatusChanged?.Invoke(this, new StatusChangedEventArgs(status));
+                }
             }
         }
 

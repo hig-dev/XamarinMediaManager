@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using Plugin.MediaManager.Abstractions.Enums;
 using Plugin.MediaManager.Abstractions.EventArguments;
@@ -353,7 +354,9 @@ namespace Plugin.MediaManager.Abstractions.Implementations
         private void OnMediaFileChanged(object sender, MediaFileChangedEventArgs e)
         {
             if (CurrentMediaFile?.Url == e?.File?.Url)
+            {
                 MediaNotificationManager?.UpdateNotifications(e?.File, Status);
+            }
             MediaFileChanged?.Invoke(sender, e);
 
         }
