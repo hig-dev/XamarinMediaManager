@@ -9,6 +9,7 @@ using Android.Net;
 using Android.Net.Wifi;
 using Android.OS;
 using Android.Provider;
+using Android.Runtime;
 using Android.Support.V4.Media.Session;
 using Plugin.MediaManager.Abstractions;
 using Plugin.MediaManager.Abstractions.Enums;
@@ -21,6 +22,14 @@ namespace Plugin.MediaManager
 {
     public abstract class MediaServiceBase : Service, AudioManager.IOnAudioFocusChangeListener, IPlaybackManager
     {
+        protected MediaServiceBase(IntPtr javaReference, JniHandleOwnership transfer) : base(javaReference, transfer)
+        {
+        }
+
+        protected MediaServiceBase()
+        {
+        }
+
         //Actions
         public const string ActionPlay = "com.xamarin.action.PLAY";
         public const string ActionPause = "com.xamarin.action.PAUSE";

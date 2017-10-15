@@ -117,7 +117,7 @@ namespace Plugin.MediaManager
                 .SetSmallIcon(SmallIconDrawableId)
                 .SetVisibility(Android.Support.V4.App.NotificationCompat.VisibilityPublic)
                 .SetContentIntent(_pendingIntent)
-                .SetContentTitle(mediaFile?.Metadata?.Title ?? string.Empty)
+                .SetContentTitle(mediaFile?.Metadata?.DisplayTitle ?? string.Empty)
                 .SetContentText(mediaFile?.Metadata?.Artist ?? string.Empty)
                 .SetContentInfo(mediaFile?.Metadata?.Album ?? string.Empty)
                 .SetLargeIcon(mediaFile?.Metadata?.Art as Bitmap)
@@ -223,7 +223,7 @@ namespace Plugin.MediaManager
                 builder
                     .PutString(MediaMetadata.MetadataKeyAlbum, currentTrack.Metadata.Artist)
                     .PutString(MediaMetadata.MetadataKeyArtist, currentTrack.Metadata.Artist)
-                    .PutString(MediaMetadata.MetadataKeyTitle, currentTrack.Metadata.Title);
+                    .PutString(MediaMetadata.MetadataKeyTitle, currentTrack.Metadata.DisplayTitle);
                 if (ShowFullscreenAlbumArtInLockscreen)
                 {
                     builder.PutBitmap(MediaMetadata.MetadataKeyAlbumArt, currentTrack.Metadata.AlbumArt as Bitmap);

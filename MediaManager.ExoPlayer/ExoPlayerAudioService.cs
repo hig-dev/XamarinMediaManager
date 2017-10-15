@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Android.App;
 using Android.Content;
 using Android.OS;
+using Android.Runtime;
 using Android.Support.V4.Media.Session;
 using Com.Google.Android.Exoplayer2;
 using Com.Google.Android.Exoplayer2.Extractor;
@@ -16,6 +17,7 @@ using Com.Google.Android.Exoplayer2.Util;
 using Plugin.MediaManager.Abstractions;
 using Plugin.MediaManager.Abstractions.EventArguments;
 using Plugin.MediaManager.Abstractions.Implementations;
+using Utils = Com.Google.Android.Exoplayer2.Util.Util;
 
 using Object = Java.Lang.Object;
 
@@ -35,15 +37,22 @@ namespace Plugin.MediaManager.ExoPlayer
 
     [Service]
     [IntentFilter(new[] { ActionPlay, ActionPause, ActionStop, ActionTogglePlayback, ActionNext, ActionPrevious })]
-    public class ExoPlayerAudioService : MediaServiceBase,
-        IExoPlayerEventListener,
-        TrackSelector.IEventListener, ExtractorMediaSource.IEventListener
+    public class ExoPlayerAudioService : MediaServiceBase, ExtractorMediaSource.IEventListener, IPlayerEventListener
     {
+        public ExoPlayerAudioService(IntPtr javaReference, JniHandleOwnership transfer) : base(javaReference, transfer)
+        {
+        }
+
+        public ExoPlayerAudioService()
+        {
+        }
+
         private SimpleExoPlayer _mediaPlayer;
 
         private IScheduledExecutorService _executorService = Executors.NewSingleThreadScheduledExecutor();
 
         private IScheduledFuture _scheduledFuture;
+        private int _lastPlayState = -1;
 
         public override TimeSpan Position
         {
@@ -84,8 +93,8 @@ namespace Plugin.MediaManager.ExoPlayer
         public override void InitializePlayer()
         {
             var mainHandler = new Handler();
-            var trackSelector = new DefaultTrackSelector(mainHandler);
-            trackSelector.AddListener(this);
+            var trackSelector = new DefaultTrackSelector();
+            //trackSelector.AddListener(this);
             var loadControl = new DefaultLoadControl();
             if (_mediaPlayer == null)
             {
@@ -156,6 +165,11 @@ namespace Plugin.MediaManager.ExoPlayer
             Console.WriteLine("Loading changed");
         }
 
+        public void OnPlaybackParametersChanged(PlaybackParameters p0)
+        {
+            Console.WriteLine("OnPlaybackParametersChanged");
+        }
+
         public void OnPlayerError(ExoPlaybackException ex)
         {
             OnMediaFileFailed(new MediaFileFailedEventArgs(ex, CurrentFile));
@@ -163,16 +177,15 @@ namespace Plugin.MediaManager.ExoPlayer
 
         public void OnPlayerStateChanged(bool playWhenReady, int state)
         {
+            if (state == _lastPlayState) return;
+            _lastPlayState = state;
+            var status = GetStatusByIntValue(state);
+            var compatState = GetCompatValueByStatus(status);
+            OnStatusChanged(new StatusChangedEventArgs(status));
+            SessionManager.UpdatePlaybackState(compatState, Position.Seconds);
             if (state == Com.Google.Android.Exoplayer2.ExoPlayer.StateEnded)
             {
                 OnMediaFinished(new MediaFinishedEventArgs(CurrentFile));
-            }
-            else
-            {
-                var status = GetStatusByIntValue(state);
-                var compatState = GetCompatValueByStatus(status);
-                OnStatusChanged(new StatusChangedEventArgs(status));
-                SessionManager.UpdatePlaybackState(compatState, Position.Seconds);
             }
         }
 
@@ -181,15 +194,21 @@ namespace Plugin.MediaManager.ExoPlayer
             Console.WriteLine("OnPositionDiscontinuity");
         }
 
-        public void OnTimelineChanged(Timeline timeline, Object manifest)
+        public void OnRepeatModeChanged(int p0)
+        {
+            Console.WriteLine("OnRepeatModeChanged");
+        }
+
+        public void OnTimelineChanged(Timeline p0, Object p1)
         {
             Console.WriteLine("OnTimelineChanged");
         }
 
-        public void OnTrackSelectionsChanged(TrackSelections p0)
+        public void OnTracksChanged(TrackGroupArray p0, TrackSelectionArray p1)
         {
-            Console.WriteLine("TrackSelectionChanged");
+            Console.WriteLine("OnTracksChanged");
         }
+
 
         /* TODO: Implement IOutput Interface => https://github.com/martijn00/ExoPlayerXamarin/issues/38
          */
@@ -203,6 +222,8 @@ namespace Plugin.MediaManager.ExoPlayer
         {
             switch (state)
             {
+                case Com.Google.Android.Exoplayer2.ExoPlayer.StateEnded:
+                    return MediaPlayerStatus.Stopped;
                 case Com.Google.Android.Exoplayer2.ExoPlayer.StateBuffering:
                     return MediaPlayerStatus.Buffering;
                 case Com.Google.Android.Exoplayer2.ExoPlayer.StateReady:
@@ -279,9 +300,9 @@ namespace Plugin.MediaManager.ExoPlayer
 
         private IMediaSource GetSource(string url)
         {
-            string escapedUrl = Uri.EscapeDataString(url);
-            var uri = Android.Net.Uri.Parse(escapedUrl);
-            var factory =  URLUtil.IsHttpUrl(escapedUrl) || URLUtil.IsHttpsUrl(escapedUrl) ? GetHttpFactory() : new FileDataSourceFactory();
+            //string escapedUrl = Uri.EscapeDataString(url);
+            var uri = Android.Net.Uri.Parse(url);
+            var factory =  URLUtil.IsHttpUrl(url) || URLUtil.IsHttpsUrl(url) ? GetHttpFactory() : new FileDataSourceFactory();
             var extractorFactory = new DefaultExtractorsFactory();
             return new ExtractorMediaSource(uri
                 , factory
@@ -291,7 +312,7 @@ namespace Plugin.MediaManager.ExoPlayer
         private IDataSourceFactory GetHttpFactory()
         {
             var bandwithMeter = new DefaultBandwidthMeter();
-            var httpFactory = new DefaultHttpDataSourceFactory(ExoPlayerUtil.GetUserAgent(this, ApplicationInfo.Name), bandwithMeter);
+            var httpFactory = new DefaultHttpDataSourceFactory(Utils.GetUserAgent(this, ApplicationInfo.Name), bandwithMeter);
             return new HttpSourceFactory(httpFactory, RequestHeaders);
         }
 

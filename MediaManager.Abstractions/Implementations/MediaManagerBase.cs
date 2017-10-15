@@ -322,18 +322,23 @@ namespace Plugin.MediaManager.Abstractions.Implementations
         private async void OnMediaFinished(object sender, MediaFinishedEventArgs e)
         {
             if (sender != CurrentPlaybackManager) return;
-
-            MediaFinished?.Invoke(sender, e);
-
-            if (MediaQueue.Repeat == RepeatType.RepeatOne)
+            if (MediaFinished != null)
             {
-                await Seek(TimeSpan.Zero);
-                await Resume();
+                MediaFinished.Invoke(sender, e);
             }
             else
             {
-                await PlayNext();
+                if (MediaQueue.Repeat == RepeatType.RepeatOne)
+                {
+                    await Seek(TimeSpan.Zero);
+                    await Resume();
+                }
+                else
+                {
+                    await PlayNext();
+                }
             }
+
         }
 
         private void OnMediaFailed(object sender, MediaFailedEventArgs e)
