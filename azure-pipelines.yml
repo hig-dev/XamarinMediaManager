@@ -4,7 +4,7 @@
 # https://docs.microsoft.com/azure/devops/pipelines/languages/xamarin
 
 trigger:
-- master
+- none
 
 pool:
   vmImage: 'windows-latest'
@@ -16,6 +16,12 @@ variables:
 steps:
 - task: NuGetToolInstaller@1
 
+- task: CmdLine@2
+  inputs:
+    script: |
+      dir
+      cd d:\a\1\s
+      dir
 - task: NuGetCommand@2
   inputs:
     restoreSolution: 'ExoPlayer_slim.sln'
